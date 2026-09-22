@@ -81,8 +81,6 @@ A ticket can be routed even when Dani does not send a public reply. That is inte
 
 ## Deep dives
 
-These are the stories I walk in interviews. Names of the product (Dani), employer (KOCOWA), and Zendesk are used on purpose. Internal hostnames, field IDs, prompts, and customer tickets are not.
-
 ### 1. The model is not the catalog
 
 **Situation.** KOCOWA tickets often ask “do you have this show?” or “are Korean subtitles live?” An unconstrained LLM will answer from training data or from the email’s tone.
@@ -155,30 +153,9 @@ I am **not** claiming CSAT, hours saved, cost savings, deflection rate, or “al
 - Finish batch metrics so the console does not lean on live Zendesk Search for every page load.
 - Keep measuring replied vs handed-off vs routed-only, instead of a single deflection number CS does not have.
 
-## What this repo is not
-
-- Not the Dani source tree
-- Not a runnable demo
-- Not official KOCOWA / wavve documentation
-- Not a dump of internal hostnames, field IDs, prompts, or customer tickets
-
-See [NOTICE.md](NOTICE.md). Ask before making a private case-study repo public; even architecture write-ups can be confidential.
-
 ## Resume bullets
 
 - Built and operate Dani, a production Python/FastAPI service that classifies KOCOWA Zendesk email/web tickets with an LLM, then auto-replies or hands off using confidence gates and a live, auditable MySQL automation policy.
 - Implemented first-email automations that query internal catalog and account systems so subtitle, title-availability, region, and cancel-path answers are not model guesses; Stripe cancellations are never executed by the bot.
 - Shipped Zendesk form routing, sub-intent tags, and escalation fields so tickets are organized for CS and internal teams even when Dani does not send a public reply.
 - Built a Flask operator console (overview, metrics, policy, audit) plus Docker Compose deployment of API, console, and scheduled reporting.
-
-## Connect this folder to GitHub (when you are ready)
-
-This folder is a **new git history**. It has no remotes yet. Create an **empty private** repo on your personal GitHub named `cs-automation-case-study` (do not initialize it with a README), then:
-
-```bash
-cd ~/Documents/Personal/Projects/cs-automation-case-study
-git remote add origin git@github.com:YOUR_USERNAME/cs-automation-case-study.git
-git push -u origin main
-```
-
-Keep it private until you (and ideally your manager) review this write-up. Do **not** add a GitHub remote to the company Dani repo on Bitbucket.
