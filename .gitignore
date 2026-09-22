@@ -1,3 +1,28 @@
-.DS_Store
+# Local notes — not for GitHub
 HOW-TO.md
 
+# macOS
+.DS_Store
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Company Dani repo paths if they ever land in this folder
+/app/
+/web-console/
+/config/
+/scripts/
+/tests/
+*.sql
+
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+
+# Editor
+.idea/
+.vscode/
