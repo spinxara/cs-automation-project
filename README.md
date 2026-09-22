@@ -1,6 +1,8 @@
-# CS automation case study
+# Dani — KOCOWA CS automation case study
 
-A public write-up of **Dani**, an internal customer-support automation service I designed, built, and operate at [wavve Americas](https://www.wavve.com/) (KOCOWA / KOCOWA+).
+Production FastAPI service that classifies KOCOWA Zendesk email and web-form tickets, then auto-replies or hands off using live policy and company data — not LLM guesses.
+
+I designed, built, and operate **Dani** at [wavve Americas](https://www.wavve.com/) (KOCOWA / KOCOWA+).
 
 This repository is a **case study only**. It does not contain source code, configs, prompts, knowledge-base content, or operational data. The production system stays in a private company repository.
 
@@ -64,6 +66,63 @@ Flow in words:
 5. If policy and confidence allow, Dani sends a public reply. Otherwise it hands off with structured notes, tags, and escalation fields.
 6. Operators use the console to review coverage and flip intent toggles. Reporting jobs publish metrics on a schedule.
 
+Three outcomes, not one:
+
+```mermaid
+flowchart TD
+  Ticket[Classified Zendesk ticket] --> Gate{Policy plus confidence?}
+  Gate -->|yes| Reply[Public reply]
+  Gate -->|no| Handoff[Human handoff]
+  Ticket --> Route[Form tags and escalation fields]
+  Route --> CS[CS and internal teams]
+```
+
+A ticket can be routed even when Dani does not send a public reply. That is intentional: organization is valuable before auto-reply coverage is complete.
+
+## Deep dives
+
+These are the stories I walk in interviews. Names of the product (Dani), employer (KOCOWA), and Zendesk are used on purpose. Internal hostnames, field IDs, prompts, and customer tickets are not.
+
+### 1. The model is not the catalog
+
+**Situation.** KOCOWA tickets often ask “do you have this show?” or “are Korean subtitles live?” An unconstrained LLM will answer from training data or from the email’s tone.
+
+**Constraint.** A wrong yes is worse than no reply: bad catalog claims, angry follow-ups, and trust loss with CS.
+
+**What I built.** Dani classifies first. Catalog, subtitle, region, and entitlement answers come from company systems of record. The model drafts language only after those lookups. If the lookup is missing or confidence is low, Dani hands off.
+
+**What changed.** First-email handlers for title availability and subtitles can auto-reply without inventing facts. CS still gets a structured ticket when the bot should stay quiet.
+
+### 2. Most tickets still go to a human, on purpose
+
+**Situation.** From mid-2026 Dani queues almost all in-scope email and web Zendesk tickets. Auto-reply is only a slice of that queue.
+
+**Constraint.** “Full automation” would mean enabling intents that are not safe yet (billing cancel, some region and license requests). CS did not want a bot that sounds confident while policy is still off.
+
+**What I built.** Every queued ticket still gets form routing, sub-intent tags, and escalation fields. Human handoff is the default when an intent is disabled. Policy-off is logged as a handoff reason, not as a model failure.
+
+**What changed.** Coverage means Dani *sees* the ticket. Success also means CS and Content / Engineering / Planning / BizDev get a sorted ticket when Dani does not answer.
+
+### 3. CS can turn intents on without a deploy
+
+**Situation.** Early on, disabling an intent meant a config change and a ship. That is too slow when a handler is wrong in production.
+
+**Constraint.** Operators need to own the risk of enabling auto-reply. Engineering should not be the on/off switch for every sub-intent.
+
+**What I built.** Live MySQL policy rows, a GET/PATCH API, and a Flask console with audit history. The browser never holds API keys. CS can flip a sub-intent; the API process reads the new row on the next ticket.
+
+**What changed.** Promotion is a loop: take a real Zendesk ticket, run it in dev, fix if wrong, enable in prod when CS agrees. Python deploys are for behavior, not for toggling.
+
+### 4. Billing is never “the bot cancelled it”
+
+**Situation.** Cancel-and-stop-charges tickets mix App Store, Google Play, and Stripe. The email text is a bad source of truth.
+
+**Constraint.** Dani must never cancel a subscription. A guessed App Store path, or a bot-executed Stripe cancel, creates chargebacks and privacy/billing risk.
+
+**What I built.** Cancel path is looked up from the account’s payment gateway, not parsed from the email. App-store customers get self-serve steps. Stripe goes to a human. Account-deletion mail gets in-app steps or a handoff — Dani does not delete the account.
+
+**What changed.** Auto-reply is allowed only where the path is safe and policy is on. Stripe cancellations stay with CS.
+
 ## Engineering decisions
 
 | Problem | What landed |
@@ -89,6 +148,12 @@ Qualitative, supported:
 - Operators can enable or disable sub-intents without shipping Python.
 
 I am **not** claiming CSAT, hours saved, cost savings, deflection rate, or “all tickets auto-reply.” Those were not measured here.
+
+## What I would do next
+
+- Enable more first-email handlers only after the same ticket-in-dev loop, not as a blanket “turn the model loose.”
+- Finish batch metrics so the console does not lean on live Zendesk Search for every page load.
+- Keep measuring replied vs handed-off vs routed-only, instead of a single deflection number CS does not have.
 
 ## What this repo is not
 
