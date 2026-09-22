@@ -105,3 +105,15 @@ See [NOTICE.md](NOTICE.md). Ask before making a private case-study repo public; 
 - Implemented first-email automations that query internal catalog and account systems so subtitle, title-availability, region, and cancel-path answers are not model guesses; Stripe cancellations are never executed by the bot.
 - Shipped Zendesk form routing, sub-intent tags, and escalation fields so tickets are organized for CS and internal teams even when Dani does not send a public reply.
 - Built a Flask operator console (overview, metrics, policy, audit) plus Docker Compose deployment of API, console, and scheduled reporting.
+
+## Connect this folder to GitHub (when you are ready)
+
+This folder is a **new git history**. It has no remotes yet. Create an **empty private** repo on your personal GitHub named `cs-automation-case-study` (do not initialize it with a README), then:
+
+```bash
+cd ~/Documents/Personal/Projects/cs-automation-case-study
+git remote add origin git@github.com:YOUR_USERNAME/cs-automation-case-study.git
+git push -u origin main
+```
+
+Keep it private until you (and ideally your manager) review this write-up. Do **not** add a GitHub remote to the company Dani repo on Bitbucket.
