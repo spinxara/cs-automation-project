@@ -147,12 +147,6 @@ Qualitative, supported:
 
 I am **not** claiming CSAT, hours saved, cost savings, deflection rate, or “all tickets auto-reply.” Those were not measured here.
 
-## What I would do next
-
-- Enable more first-email handlers only after the same ticket-in-dev loop, not as a blanket “turn the model loose.”
-- Finish batch metrics so the console does not lean on live Zendesk Search for every page load.
-- Keep measuring replied vs handed-off vs routed-only, instead of a single deflection number CS does not have.
-
 ## Resume bullets
 
 - Built and operate Dani, a production Python/FastAPI service that classifies KOCOWA Zendesk email/web tickets with an LLM, then auto-replies or hands off using confidence gates and a live, auditable MySQL automation policy.
