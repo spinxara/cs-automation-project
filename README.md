@@ -20,9 +20,7 @@ The work needed classification, routing, and *limited* auto-reply — without tr
 
 ## Role
 
-I specified behavior, implemented the service, operate the production Docker host, and decide policy: which intents may auto-reply vs hand off to a human.
-
-I did **not** build the company’s customer-account API. Dani consumes that service; another engineer authored it.
+I specified behavior, implemented the service, operate the production Docker host, and decide policy: which intents may auto-reply vs hand off to a human. Dani uses internal customer-account APIs to fetch billing, entitlement, and account facts so those answers are not guessed from the email.
 
 ## What shipped
 
