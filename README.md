@@ -2,7 +2,7 @@
 
 Production FastAPI service that classifies KOCOWA Zendesk email and web-form tickets, then auto-replies or hands off using live policy and company data — not LLM guesses.
 
-I designed, built, and operate **Dani** at [wavve Americas](https://www.wavve.com/) (KOCOWA / KOCOWA+).
+I designed, built, and operate **Dani** at [wavve Americas](https://www.kocowa.com/) (KOCOWA / KOCOWA+).
 
 This repository is a **case study only**. It does not contain source code, configs, prompts, knowledge-base content, or operational data. The production system stays in a private company repository.
 
@@ -25,15 +25,15 @@ I specified behavior, implemented the service, operate the production Docker hos
 ## What shipped
 
 - End-to-end ticket pipeline: ingest from Zendesk, classify, apply policy, reply or hand off
-- Intent taxonomy, classifier, and scope guard, with form-field and screenshot context when the email body is not enough
+- Intent taxonomy (six families: account deletion, billing, technical, requests, how-to questions, other), classifier, and scope guard, with form-field and screenshot context when the email body is not enough
 - Specialized first-email handlers for catalog, subtitles, region, cancel path, subscription visibility, and account deletion
-- Ticket routing even when Dani does not send a public reply (form, tags, escalation fields)
-- Live, auditable automation policy so operators can turn intents on without a Python deploy
+- Ticket routing even when Dani does not send a public reply (form, tags, escalation fields, and a CS note)
+- Live, auditable automation policy so operators can turn intents on without a Python deploy — a sub-intent can stay on when its parent is off
 - Flask operator console (overview, metrics, policy toggles, audit history). The browser never holds API keys.
 - Process/error logging and internal chat alerts
-- Scheduled support-metrics reporting
+- Scheduled reporting: Zendesk outcome snapshots, a Status & Scope page from live policy, and a monthly escalation-theme digest
 - Docker Compose for the API, console, and reporting jobs
-- Tests around high-risk rules (catalog claims, cancel path, policy gates)
+- pytest around high-risk rules: catalog claims, cancel path, policy gates, and handler branches
 
 ## Stack
 
@@ -62,7 +62,7 @@ Flow in words:
 3. The service fetches the ticket (including custom fields and optional screenshots), classifies it, and loads the live automation policy.
 4. Catalog, entitlement, and billing facts come from company databases and APIs — not from the model.
 5. If policy and confidence allow, Dani sends a public reply. Otherwise it hands off with structured notes, tags, and escalation fields.
-6. Operators use the console to review coverage and flip intent toggles. Reporting jobs publish metrics on a schedule.
+6. Operators use the console to review coverage and flip intent toggles. Reporting jobs publish metrics, policy scope, and escalation themes on a schedule.
 
 Three outcomes, not one:
 
@@ -75,7 +75,89 @@ flowchart TD
   Route --> CS[CS and internal teams]
 ```
 
-A ticket can be routed even when Dani does not send a public reply. That is intentional: organization is valuable before auto-reply coverage is complete.
+A ticket can be routed even when Dani does not send a public reply. That is intentional: organization is valuable before auto-reply coverage is complete. CS still gets a structured note (classification, routing, account facts, handler outcome) so a human can pick up without re-reading the bot.
+
+After classification, two tracks — not one generic “ask the model”:
+
+```mermaid
+flowchart TD
+  Ticket[Email or web ticket] --> Understand[Classify plus form and screenshot context]
+  Understand --> Policy[Live policy plus confidence]
+  Policy --> Track{Which track?}
+  Track -->|Specialized handler| Facts[Company systems of record]
+  Track -->|Generic how-to| KB[Retrieved help-center context]
+  Facts --> Outcome{Reply Chat or handoff}
+  KB --> Outcome
+  Understand --> Route[Form tags and escalation fields]
+```
+
+How-to questions (“how do I reset my password?”) use retrieved help-center copy. Catalog, subtitles, region, entitlement, and cancel path use company systems of record; the model drafts language only after those lookups.
+
+| Ticket type | Source of truth | Typical outcome |
+| --- | --- | --- |
+| Title on KOCOWA? | Catalog | Solved. Never claim a miss as a hit. |
+| Subtitle defect | Catalog + live-language check | Pending + internal Chat, or solved |
+| Add this show / extra subtitle language / new country | Catalog or product region | Already available → solved. New request → solved + internal suggestion Chat. |
+| Plan not showing | Account entitlement | Self-serve steps, or pending for CS |
+| Cancel / stop charges | Payment gateway on the account | App stores: self-serve steps. Stripe: a human. Dani never cancels. |
+| Delete account | Account + help-center rules | In-app steps or handoff. Dani never deletes. |
+
+Hard constraints:
+
+- Email and web-form tickets only — not live chat
+- First customer email only; a follow-up reopens for a human
+- Never invent catalog availability
+- Never cancel a subscription
+- Never delete an account
+- Policy-off is a handoff reason, not a model failure
+
+## Operator console
+
+A separate Flask app is the operator UI. The browser talks only to Flask. Flask calls Dani over HTTP. API keys never sit in the browser.
+
+Two jobs, four pages:
+
+```mermaid
+flowchart LR
+  Operator[CS operator] --> Console[Flask console]
+  Console --> Overview[Overview]
+  Console --> Metrics[Metrics]
+  Console --> Policy[Automation Policy]
+  Console --> Audit[Audit History]
+  Overview --> DaniAPI[Dani HTTP APIs]
+  Metrics --> DaniAPI
+  Policy --> DaniAPI
+  Audit --> DaniAPI
+```
+
+| Page | Kind | What operators see |
+| --- | --- | --- |
+| Overview | Reporting | Coverage (how many intents are on), a Zendesk teaser for the selected window, recent policy flips, process activity, and compact errors — without exception dumps or ticket bodies |
+| Metrics | Reporting | Queued / handled / replied / handoff for email and web tickets, a shared time filter, a daily trend chart, mix bars, and monthly tables. Opening the page does not call Zendesk Search; it reads a batch snapshot |
+| Automation Policy | Control | Load and flip intent / sub-intent switches for Dev or Prod. Prod flips affect live auto-reply |
+| Audit History | Control | Who flipped which switch, when, old → new, and why. Read-only |
+
+Dev and Prod are two independent policy row sets. Overview and Metrics share a time bar (last 24h through 90d, this month, or a custom range). Metrics is outcome counts, not CSAT or hours saved.
+
+Dummy console on mock data. Not production tickets.
+
+![Overview](images/console-overview.png)
+
+*Overview (Dev, mock data)*
+
+![Metrics](images/console-metrics.png)
+
+*Metrics (mock data; round toy counts)*
+
+![Automation Policy](images/console-policy.png)
+
+*Automation Policy (Dev, mock switches)*
+
+![Audit History](images/console-audit.png)
+
+*Audit History (Dev, mock flips)*
+
+The same Flask console is how CS can enable a handler without a Python deploy (deep dive 3).
 
 ## Deep dives
 
@@ -89,15 +171,36 @@ A ticket can be routed even when Dani does not send a public reply. That is inte
 
 **What changed.** First-email handlers for title availability and subtitles can auto-reply without inventing facts. CS still gets a structured ticket when the bot should stay quiet.
 
-### 2. Most tickets still go to a human, on purpose
+**Walkthrough (invented ticket).** A customer asks whether “Rumming Man” is on KOCOWA. Dani classifies a catalog question and checks live policy. Title lookup tries article variants, then a spelling correction, then the catalog — the catalog still has to confirm. A hit: public reply naming the title and how to search, and mentioning the spelling assumption. A miss after retry: invite to browse; never “yes, we have it.” A follow-up email reopens for a human.
 
-**Situation.** From mid-2026 Dani queues almost all in-scope email and web Zendesk tickets. Auto-reply is only a slice of that queue.
+### 2. The whole queue is routed. A reply is gated.
 
-**Constraint.** “Full automation” would mean enabling intents that are not safe yet (billing cancel, some region and license requests). CS did not want a bot that sounds confident while policy is still off.
+**Situation.** From mid-2026 Dani queues almost all in-scope email and web Zendesk tickets. Each one is classified and filed for the right team. A public reply happens only on the slice where live policy and confidence both allow it.
 
-**What I built.** Every queued ticket still gets form routing, sub-intent tags, and escalation fields. Human handoff is the default when an intent is disabled. Policy-off is logged as a handoff reason, not as a model failure.
+**Constraint.** Some intents are not safe to answer yet (billing cancel, some region and license requests). Those stay off until CS agrees. While they are off, Dani should file the ticket and stay quiet.
 
-**What changed.** Coverage means Dani *sees* the ticket. Success also means CS and Content / Engineering / Planning / BizDev get a sorted ticket when Dani does not answer.
+**What I built.** Routing is the path every queued ticket takes: form, sub-intent tags, escalation fields, and a CS note. Auto-reply is a second gate on top of that. When the gate is closed, the handoff reason is recorded — including when the reason is simply that the intent is disabled.
+
+```mermaid
+flowchart TD
+  Queue[In-scope email or web ticket] --> Always[Classify, route, tag, and note]
+  Always --> Gate{Policy and confidence allow a reply?}
+  Gate -->|yes| Reply[Public reply]
+  Gate -->|no| Quiet[Structured handoff]
+```
+
+**What changed.** Handling a ticket can mean CS and Content / Engineering / Planning / BizDev receive it already sorted, with no customer-facing reply. Operators can see why it stayed quiet:
+
+| Reason | Meaning |
+| --- | --- |
+| Intent disabled | Policy is off for that sub-intent |
+| Classifier | Low confidence or unclear family |
+| User requested | Customer asked for a person |
+| Out of scope | Not KOCOWA support |
+| KB exception | Retrieved playbook says this case needs a human |
+| Process error | A lookup or write failed |
+
+The usual reason is an intent that is still disabled. That is a policy choice operators can flip later (deep dive 3), and the ticket was already routed.
 
 ### 3. CS can turn intents on without a deploy
 
@@ -133,14 +236,14 @@ A ticket can be routed even when Dani does not send a public reply. That is inte
 | Chat noise | End-of-run summaries on separate channels from errors and escalations. |
 | Draft replies on handoffs | Switchable after CS said they barely used them. |
 
-## Outcomes (honest)
+## Outcomes
 
 Qualitative, supported:
 
 - Production Docker stack (API, console, reporter) is running.
-- From mid-2026 onward, Dani **queues almost all in-scope email/web tickets** — most still hand off because many intents remain off by policy, not because the model failed.
+- From mid-2026 onward, Dani **queues almost all in-scope email/web tickets**, routes every one, and sends a public reply only where policy and confidence allow it.
 - Auto-reply volume rose as specialized handlers shipped, especially technical-support cases.
 - Tickets are **organized even when Dani does not answer**: form routing and escalation fields still land for CS and internal teams.
 - Operators can enable or disable sub-intents without shipping Python.
 
-I am **not** claiming CSAT, hours saved, cost savings, deflection rate, or “all tickets auto-reply.” Those were not measured here. 
+I am **not** claiming CSAT, hours saved, cost savings, deflection rate, or “all tickets auto-reply.” Those were not measured here.
